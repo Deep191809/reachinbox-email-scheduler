@@ -70,16 +70,30 @@ export async function sendEmail(emailId: string, attemptNumber: number) {
     });
 
     const providerMessageId = info.messageId || deterministicMessageId;
-    await prisma.email.update({
-      where: { id: emailId },
-      data: {
-        status: 'SENT',
-        sentAt: new Date(),
-        processingAt: null,
-        messageId: providerMessageId,
-        lastError: null,
-      },
-    });
+    const sentUpdate = await prisma.email.updateMany({
+  where: {
+    id: emailId,
+    status: 'PROCESSING',
+  },
+  data: {
+    status: 'SENT',
+    sentAt: new Date(),
+    processingAt: null,
+    messageId: providerMessageId,
+    lastError: null,
+  },
+});
+
+if (sentUpdate.count === 0) {
+  console.warn(
+    `Email ${emailId} was already finalized by another worker; skipping duplicate state update.`,
+  );
+
+  return {
+    skipped: true,
+    messageId: providerMessageId,
+  };
+}
 
     await indexEmail({
       id: email.id,
